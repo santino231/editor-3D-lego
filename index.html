@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lego Studio Pro - Stack Fix</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #111; }
+        
+        /* --- UI: BARRA SUPERIOR (Archivo y Edición) --- */
+        #top-bar {
+            position: absolute; top: 0; left: 0; right: 0; height: 50px;
+            background: #222; border-bottom: 1px solid #444;
+            display: flex; align-items: center; padding: 0 20px; gap: 15px;
+            z-index: 20; box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+        }
+        .logo { font-weight: 800; color: #fff; font-size: 1.2rem; margin-right: 20px; letter-spacing: 1px;}
+        .logo span { color: #ffcc00; }
+        
+        .tool-btn {
+            background: #333; color: #ddd; border: 1px solid #555;
+            padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 0.85rem;
+            transition: 0.2s; display: flex; align-items: center; gap: 5px;
+        }
+        .tool-btn:hover { background: #555; color: #fff; }
+        .tool-btn:active { transform: translateY(1px); }
+
+        /* --- UI: BARRA LATERAL IZQUIERDA (Propiedades) --- */
+        .sidebar {
+            position: absolute; top: 50px; bottom: 0; width: 220px;
+            background: rgba(30, 30, 30, 0.95); backdrop-filter: blur(5px);
+            border-right: 1px solid #444; color: #eee;
+            padding: 15px; overflow-y: auto; z-index: 10;
+            display: flex; flex-direction: column; gap: 15px;
+        }
+
+        /* --- UI: BARRA LATERAL DERECHA (Piezas) --- */
+        .right-sidebar {
+            position: absolute; top: 50px; bottom: 0; right: 0; width: 140px;
+            background: rgba(30, 30, 30, 0.95); backdrop-filter: blur(5px);
+            border-left: 1px solid #444; color: #eee;
+            padding: 15px; overflow-y: auto; z-index: 10;
+        }
+
+        h3 { margin: 0 0 8px 0; font-size: 0.8rem; text-transform: uppercase; color: #888; letter-spacing: 1px; }
+        label { display: block; font-size: 0.85rem; margin-bottom: 4px; }
+        
+        /* Controles bonitos */
+input[type="color"] {
+    -webkit-appearance: none; 
+    appearance: none; /* Añadido para compatibilidad estándar */
+    border: none; 
+    width: 100%; 
+    height: 35px;
+    border-radius: 4px; 
+    cursor: pointer; 
+    padding: 0; 
+    background: none;
+        }
+        select, button.preset-btn {
+            width: 100%; padding: 8px; background: #252525; border: 1px solid #444;
+            color: #ddd; border-radius: 4px; cursor: pointer; margin-bottom: 5px;
+            font-size: 0.85rem; text-align: left; transition: all 0.2s;
+        }
+        button.preset-btn:hover { background: #3a3a3a; border-color: #666; }
+        button.preset-btn.active { 
+            background: #007acc; border-color: #005f9e; color: white; 
+            box-shadow: 0 0 8px rgba(0, 122, 204, 0.4);
+        }
+
+        /* Notificaciones y Tooltips */
+        #status-bar {
+            position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.8); color: white; padding: 8px 20px;
+            border-radius: 20px; font-size: 0.9rem; pointer-events: none;
+            border: 1px solid #555; opacity: 0.8; transition: opacity 0.3s;
+        }
+        
+        .key-hint { 
+            display: inline-block; background: #555; padding: 2px 6px; 
+            border-radius: 3px; font-family: monospace; font-size: 0.8rem; margin: 0 2px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="top-bar">
+        <div class="logo">LEGO<span>PRO</span></div>
+        <div style="flex-grow: 1;"></div> <button class="tool-btn" onclick="undoAction()">↩ Deshacer (Ctrl+Z)</button>
+        <button class="tool-btn" onclick="saveProject()">💾 Guardar</button>
+        <button class="tool-btn" onclick="document.getElementById('fileInput').click()">📂 Cargar</button>
+        <input type="file" id="fileInput" style="display: none;" accept=".json" onchange="loadProject(this)">
+    </div>
+
+    <div class="sidebar">
+        <div>
+            <h3>Color & Material</h3>
+            <input type="color" id="colorSelect" value="#cc0000">
+            <div style="margin-top: 5px; font-family: monospace; color: #aaa; text-align: center;" id="colorHex">#CC0000</div>
+        </div>
+        <hr style="border-color: #444; width: 100%;">
+        <div>
+            <h3>Tamaño Personalizado</h3>
+            <label>Ancho</label>
+            <select id="widthSelect">
+                <option value="1">1 Stud</option>
+                <option value="2" selected>2 Studs</option>
+                <option value="3">3 Studs</option>
+                <option value="4">4 Studs</option>
+                <option value="6">6 Studs</option>
+                <option value="8">8 Studs</option>
+            </select>
+            <label>Largo</label>
+            <select id="depthSelect">
+                <option value="1">1 Stud</option>
+                <option value="2" selected>2 Studs</option>
+                <option value="3">3 Studs</option>
+                <option value="4">4 Studs</option>
+                <option value="6">6 Studs</option>
+                <option value="8">8 Studs</option>
+            </select>
+            <button class="preset-btn" style="margin-top:10px; text-align:center;" onclick="setManualMode()">Aplicar Tamaño</button>
+        </div>
+        <div style="margin-top: auto; color: #666; font-size: 0.8rem;">
+            <p>Rotar: <span class="key-hint">R</span></p>
+            <p>Borrar: <span class="key-hint">Click Der</span></p>
+        </div>
+    </div>
+
+    <div class="right-sidebar">
+        <h3>Ladrillos</h3>
+        <button class="preset-btn" onclick="setPreset('standard', 1, 1)">1 x 1</button>
+        <button class="preset-btn" onclick="setPreset('standard', 1, 2)">1 x 2</button>
+        <button class="preset-btn" onclick="setPreset('standard', 1, 4)">1 x 4</button>
+        <button class="preset-btn active" onclick="setPreset('standard', 2, 2)">2 x 2</button>
+        <button class="preset-btn" onclick="setPreset('standard', 2, 4)">2 x 4</button>
+        
+        <h3>Especiales</h3>
+        <button class="preset-btn" onclick="setPreset('wheel_base', 4, 2)">Chasis Auto</button>
+        <button class="preset-btn" onclick="setPreset('slope', 2, 2)">Rampa 2x2</button>
+        <button class="preset-btn" onclick="setPreset('slope', 2, 1)">Rampa 2x1</button>
+        <button class="preset-btn" onclick="setPreset('cylinder', 1, 1)">Cilindro</button>
+        <button class="preset-btn" onclick="setPreset('flat', 2, 2)">Placa Plana</button>
+    </div>
+
+    <div id="status-bar">Listo para construir. Presiona <span class="key-hint">R</span> para rotar.</div>
+
+    <script type="importmap">
+        { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // --- VARIABLES GLOBALES ---
+        let scene, camera, renderer, controls;
+        let raycaster, mouse;
+        let plane; 
+        let objects = []; 
+        let ghostBrick = null; 
+        let historyStack = [];
+
+        // CONSTANTES LEGO
+        const UNIT = 10;
+        const BRICK_H = 12; 
+        const PLATE_H = 4;
+        
+        let state = {
+            color: '#cc0000',
+            width: 2,
+            depth: 2,
+            type: 'standard', 
+            rotation: 0 
+        };
+
+        let isGhostValid = true; 
+        let lastMouseX, lastMouseY;
+
+        init();
+        animate();
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x222224);
+            scene.fog = new THREE.Fog(0x222224, 300, 1800);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 5000);
+            camera.position.set(150, 200, 150);
+
+            const ambient = new THREE.AmbientLight(0xffffff, 0.4);
+            scene.add(ambient);
+            const keyLight = new THREE.DirectionalLight(0xffffff, 1);
+            keyLight.position.set(100, 300, 100);
+            keyLight.castShadow = true;
+            keyLight.shadow.mapSize.set(2048, 2048);
+            scene.add(keyLight);
+            const fillLight = new THREE.DirectionalLight(0xbbcce0, 0.5);
+            fillLight.position.set(-100, 100, -50);
+            scene.add(fillLight);
+
+            // SUELO
+            const planeGeo = new THREE.PlaneGeometry(3000, 3000);
+            planeGeo.rotateX(-Math.PI / 2);
+            plane = new THREE.Mesh(planeGeo, new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 1 }));
+            plane.receiveShadow = true;
+            plane.name = "ground"; // Importante para detectar suelo
+            scene.add(plane);
+            objects.push(plane);
+
+            const grid = new THREE.GridHelper(3000, 300, 0x444444, 0x222222);
+            grid.position.y = 0.1;
+            scene.add(grid);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.body.appendChild(renderer.domElement);
+
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.maxPolarAngle = Math.PI / 2 - 0.05;
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+
+            updateGhost();
+
+            window.addEventListener('resize', onResize);
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mousedown', onMouseDown);
+            document.addEventListener('mouseup', onMouseUp);
+            document.addEventListener('keydown', onKeyDown);
+
+            setupUI();
+        }
+
+        function createBrickGeometry(type, w, d, color, isGhost = false) {
+            const group = new THREE.Group();
+            
+            let material;
+            if (isGhost) {
+                material = new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 0.5 });
+            } else {
+                material = new THREE.MeshStandardMaterial({ color: color, roughness: 0.2, metalness: 0.05 });
+            }
+
+            const pw = w * UNIT;
+            const pd = d * UNIT;
+            const h = (type === 'flat') ? PLATE_H : BRICK_H;
+
+            let mesh;
+            if (type === 'cylinder') {
+                mesh = new THREE.Mesh(new THREE.CylinderGeometry(UNIT/2 - 0.5, UNIT/2 - 0.5, h, 32), material);
+                mesh.position.y = h/2; // Origin at bottom
+            } else if (type === 'slope') {
+                const shape = new THREE.Shape();
+                shape.moveTo(0,0); shape.lineTo(pw,0); shape.lineTo(pw, h); shape.lineTo(0,0);
+                const geom = new THREE.ExtrudeGeometry(shape, { depth: pd, bevelEnabled: false });
+                geom.translate(-pw/2, 0, -pd/2);
+                mesh = new THREE.Mesh(geom, material);
+            } else {
+                mesh = new THREE.Mesh(new THREE.BoxGeometry(pw, h, pd), material);
+                mesh.position.y = h/2; // Origin at bottom
+            }
+            
+            mesh.castShadow = !isGhost;
+            mesh.receiveShadow = !isGhost;
+            group.add(mesh);
+
+            if (type !== 'slope' && type !== 'flat') {
+                const studGeo = new THREE.CylinderGeometry(2.4, 2.4, 1.6, 16);
+                const startX = -pw/2 + UNIT/2;
+                const startZ = -pd/2 + UNIT/2;
+                if (type === 'cylinder') {
+                    const s = new THREE.Mesh(studGeo, material);
+                    s.position.y = h + 0.8; group.add(s);
+                } else {
+                    for(let i=0; i<w; i++){
+                        for(let j=0; j<d; j++){
+                            const s = new THREE.Mesh(studGeo, material);
+                            s.position.set(startX + i*UNIT, h + 0.8, startZ + j*UNIT);
+                            group.add(s);
+                        }
+                    }
+                }
+            }
+
+            if (type === 'wheel_base') {
+                const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 });
+                const rVal = 10; 
+                const positions = [
+                    {x: pw/2*0.6, z: pd/2 + 2}, {x: -pw/2*0.6, z: pd/2 + 2},
+                    {x: pw/2*0.6, z: -pd/2 - 2}, {x: -pw/2*0.6, z: -pd/2 - 2}
+                ];
+                positions.forEach(p => {
+                    const wGeo = new THREE.CylinderGeometry(rVal, rVal, 4, 24);
+                    wGeo.rotateX(Math.PI/2);
+                    const wheel = new THREE.Mesh(wGeo, isGhost ? material : wheelMat);
+                    wheel.position.set(p.x, 2, p.z);
+                    group.add(wheel);
+                });
+            }
+
+            group.userData = { isBrick: true, type: type, w: w, d: d, h: h, baseColor: color };
+            return group;
+        }
+
+        function updateGhost() {
+            if (ghostBrick) scene.remove(ghostBrick);
+            ghostBrick = createBrickGeometry(state.type, state.width, state.depth, state.color, true);
+            ghostBrick.rotation.y = state.rotation * (Math.PI / 2);
+            // Almacenar el tamaño de la geometría para el cálculo de colisiones y snapping
+            ghostBrick.userData.bbox = new THREE.Box3().setFromObject(ghostBrick);
+            ghostBrick.userData.size = new THREE.Vector3();
+            ghostBrick.userData.bbox.getSize(ghostBrick.userData.size);
+            scene.add(ghostBrick);
+        }
+
+        // --- CORRECCIÓN EN EL POSICIONAMIENTO Y COLISIONES ---
+        function onMouseMove(e) {
+            if (e.target.closest('.sidebar') || e.target.closest('.right-sidebar') || e.target.closest('#top-bar')) {
+                if(ghostBrick) ghostBrick.visible = false;
+                return;
+            }
+            if(ghostBrick) ghostBrick.visible = true;
+
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(objects, true);
+
+            if (intersects.length > 0) {
+                const intersect = intersects[0];
+                const hitNormal = intersect.face.normal.clone().transformDirection(intersect.object.matrixWorld).normalize();
+                const point = intersect.point;
+                
+                // Determinar las dimensiones del fantasma considerando la rotación
+                const rot = state.rotation % 2 !== 0; // true si está rotado 90/270 grados
+                const ghostHalfW = (rot ? state.depth : state.width) * UNIT / 2;
+                const ghostHalfD = (rot ? state.width : state.depth) * UNIT / 2;
+                
+                let targetX = point.x;
+                let targetY = point.y;
+                let targetZ = point.z;
+
+                // 1. Manejo del desplazamiento para la colocación lateral o vertical
+                // Si el normal es mayormente horizontal (X o Z)
+                if (Math.abs(hitNormal.y) < 0.5) { 
+                    // Colocación lateral: Hay que desplazar el centro del fantasma
+                    // por la mitad de su tamaño en la dirección del normal.
+                    
+                    // Desplazamiento en X
+                    if (Math.abs(hitNormal.x) > 0.5) {
+                        targetX += hitNormal.x * ghostHalfW;
+                    }
+                    // Desplazamiento en Z
+                    if (Math.abs(hitNormal.z) > 0.5) {
+                        targetZ += hitNormal.z * ghostHalfD;
+                    }
+                } 
+                // Si el normal es vertical (Y), el punto ya está en el centro horizontal ideal
+                // para apilar. No se necesita desplazamiento horizontal adicional.
+
+                // 2. Snap a la cuadrícula
+                targetX = Math.round(targetX / UNIT) * UNIT;
+                targetZ = Math.round(targetZ / UNIT) * UNIT;
+                targetY = Math.round(targetY / PLATE_H) * PLATE_H; // El bottom del ladrillo siempre se alinea a la placa (4 unidades)
+
+                ghostBrick.position.set(targetX, targetY, targetZ);
+
+                // --- COLISIÓN TOLERANTE ---
+                const collision = checkCollision();
+                isGhostValid = !collision;
+
+                const mat = ghostBrick.children[0].material;
+                if (collision) {
+                    mat.color.setHex(0xff0000);
+                    document.body.style.cursor = 'not-allowed';
+                } else {
+                    mat.color.set(state.color);
+                    document.body.style.cursor = 'crosshair';
+                }
+            }
+        }
+
+        function checkCollision() {
+            if (!ghostBrick) return false;
+            // Usamos una caja de colisión para el fantasma
+            const ghostBox = new THREE.Box3().setFromObject(ghostBrick);
+            
+            // Reducimos la caja para permitir toques (tanto vertical como horizontalmente)
+            // Shrink X/Z por 0.5 (para toques laterales)
+            // Shrink Y por 2.5 (para ignorar studs en apilamiento)
+            ghostBox.expandByVector(new THREE.Vector3(-0.5, -2.5, -0.5)); 
+
+            for (let obj of objects) {
+                if (obj === plane) continue;
+                const objBox = new THREE.Box3().setFromObject(obj);
+                // También reducimos la caja de los objetos existentes para la verificación
+                objBox.expandByVector(new THREE.Vector3(-0.5, -0.5, -0.5)); 
+
+                if (ghostBox.intersectsBox(objBox)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function onMouseDown(e) {
+            if (e.target.tagName !== 'CANVAS') return;
+            lastMouseX = e.clientX;
+            lastMouseY = e.clientY;
+        }
+
+        function onMouseUp(e) {
+            if (e.target.tagName !== 'CANVAS') return;
+            const dist = Math.sqrt(Math.pow(e.clientX - lastMouseX, 2) + Math.pow(e.clientY - lastMouseY, 2));
+            if (dist > 5) return;
+
+            if (e.button === 0) { 
+                if (isGhostValid && ghostBrick.visible) placeBrick();
+            } else if (e.button === 2) { 
+                deleteBrick();
+            }
+        }
+
+        function onKeyDown(e) {
+            if (e.key.toLowerCase() === 'r') {
+                state.rotation = (state.rotation + 1) % 4;
+                updateGhost();
+                // Recalcular posición después de rotar
+                onMouseMove({ clientX: lastMouseX, clientY: lastMouseY, target: renderer.domElement });
+            }
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') undoAction();
+        }
+
+        function placeBrick() {
+            const brick = createBrickGeometry(state.type, state.width, state.depth, state.color, false);
+            brick.position.copy(ghostBrick.position);
+            brick.rotation.copy(ghostBrick.rotation);
+            scene.add(brick);
+            objects.push(brick);
+            historyStack.push({ action: 'add', object: brick });
+            showStatus("¡Pieza colocada!");
+        }
+
+        function deleteBrick() {
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(objects, true);
+            if (intersects.length > 0) {
+                let target = intersects[0].object;
+                if (target === plane) return;
+                while(target.parent && !target.userData.isBrick && target.parent !== scene) target = target.parent;
+                if (target.userData.isBrick) {
+                    historyStack.push({ action: 'delete', object: target, parent: scene });
+                    scene.remove(target);
+                    objects.splice(objects.indexOf(target), 1);
+                    showStatus("Pieza eliminada");
+                }
+            }
+        }
+
+        window.undoAction = function() {
+            if (historyStack.length === 0) return;
+            const lastAction = historyStack.pop();
+            if (lastAction.action === 'add') {
+                scene.remove(lastAction.object);
+                objects.splice(objects.indexOf(lastAction.object), 1);
+            } else if (lastAction.action === 'delete') {
+                scene.add(lastAction.object);
+                objects.push(lastAction.object);
+            }
+        }
+
+        window.saveProject = function() {
+            const data = objects.filter(obj => obj.userData.isBrick).map(obj => ({
+                type: obj.userData.type, w: obj.userData.w, d: obj.userData.d, color: obj.userData.baseColor,
+                pos: { x: obj.position.x, y: obj.position.y, z: obj.position.z },
+                rot: { x: obj.rotation.x, y: obj.rotation.y, z: obj.rotation.z }
+            }));
+            const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = 'lego.json'; a.click();
+        }
+
+        window.loadProject = function(input) {
+            const file = input.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = JSON.parse(e.target.result);
+                for (let i = objects.length - 1; i >= 0; i--) { if (objects[i] !== plane) scene.remove(objects[i]); }
+                objects = [plane]; historyStack = [];
+                data.forEach(item => {
+                    const brick = createBrickGeometry(item.type, item.w, item.d, item.color, false);
+                    brick.position.set(item.pos.x, item.pos.y, item.pos.z);
+                    brick.rotation.set(item.rot.x, item.rot.y, item.rot.z);
+                    scene.add(brick); objects.push(brick);
+                });
+            };
+            reader.readAsText(file);
+        }
+
+        function showStatus(msg) {
+            const bar = document.getElementById('status-bar');
+            bar.innerText = msg; bar.style.opacity = 1; setTimeout(() => { bar.style.opacity = 0.5; }, 2000);
+        }
+
+        function setupUI() {
+            document.getElementById('colorSelect').addEventListener('input', (e) => {
+                state.color = e.target.value; document.getElementById('colorHex').innerText = state.color; updateGhost();
+            });
+            window.setManualMode = () => {
+                state.width = parseInt(document.getElementById('widthSelect').value);
+                state.depth = parseInt(document.getElementById('depthSelect').value);
+                state.type = 'standard'; updatePresetsUI(); updateGhost();
+            };
+            window.setPreset = (type, w, d) => {
+                state.type = type; state.width = w; state.depth = d;
+                if(type === 'standard') {
+                    document.getElementById('widthSelect').value = w; document.getElementById('depthSelect').value = d;
+                }
+                updatePresetsUI(type, w, d); updateGhost();
+            };
+        }
+        function updatePresetsUI(type, w, d) { document.querySelectorAll('.preset-btn').forEach(btn => btn.classList.remove('active')); }
+        function onResize() { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); }
+        function animate() { requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); }
+    </script>
+</body>
+</html>
